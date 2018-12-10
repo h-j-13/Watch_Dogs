@@ -331,7 +331,7 @@ def get_mem_info():
         MemTotal = mem_info.readline().split(":")[1].strip().strip("kB")
         MemFree = mem_info.readline().split(":")[1].strip().strip("kB")
         MemAvailable = mem_info.readline().split(":")[1].strip().strip("kB")
-        print MemTotal
+        # 只需要前三行
         return map(int, [MemTotal, MemFree, MemAvailable])
 
 
@@ -443,3 +443,12 @@ def get_sys_info():
     sys_info["system"] = sys_info_data.split('(')[3].split(')')[0].strip()
 
     return sys_info
+
+
+def get_sys_total_mem():
+    """获取总内存大小 - /proc/meminfo"""
+
+    with open("/proc/meminfo", "r") as mem_info:
+        MemTotal = mem_info.readline().split(":")[1].strip().strip("kB")
+
+    return MemTotal
