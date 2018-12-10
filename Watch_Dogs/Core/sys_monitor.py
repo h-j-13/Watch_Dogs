@@ -2,7 +2,7 @@
 # encoding:utf-8
 
 """
-进程检测核心功能实现
+进程检测核心功能实现 - 系统检测
 
 主要包括
 - 总体CPU占用率
@@ -394,7 +394,52 @@ def calc_net_speed(interval=calc_func_interval):
     return download_speed, upload_speed
 
 
-if __name__ == '__main__':
-    while 1:
-        sleep(2)
-        print calc_net_speed()
+def get_cpu_info():
+    """系统CPU信息 - /proc/cpuinfo"""
+
+    """
+    /proc/cpuinfo
+    
+    This is a collection of CPU and system architecture dependent items, for each supported architecture a different list.
+    Two common entries are processor which gives CPU number and bogomips; a system constant that is calculated during 
+    kernel initialization.  SMP machines have information for each CPU.  
+    The lscpu(1) command gathers its information from this file.
+    """
+
+    result = []
+    c = ""
+    with open("/proc/cpuinfo", "r") as cpuinfo:
+        for line in cpuinfo:
+            if line.startswith("processor"):
+                c = ""
+            elif line.startswith("model name"):
+                c += line.split(":", 1)[1].strip() + " - "
+            elif line.startswith("cpu MHz"):
+                c += line.split(":", 1)[1].strip() + "Mhz "
+            elif line.startswith("siblings"):
+                c += line.split(":", 1)[1].strip() + " CPUs"
+            elif line.startswith("power management"):
+                result.append(c)
+
+    return result
+
+
+def get_sys_info():
+    """系统信息 - /proc/version"""
+
+    """
+    /proc/version
+    
+    This string identifies the kernel version that is currently running.  
+    It includes the contents of /proc/sys/kernel/ostype, /proc/sys/kernel/osrelease and /proc/sys/kernel/version. 
+    For example:
+    Linux version 1.0.9 (quinlan@phaze) #1 Sat May 14 01:51:54 EDT 1994
+    """
+
+    sys_info = {"kernel": "", "system": ""}
+    with open("/proc/version", "r") as version:
+        sys_info_data = version.readline()
+    sys_info["kernel"] = sys_info_data.split('(')[0].strip()
+    sys_info["system"] = sys_info_data.split('(')[3].split(')')[0].strip()
+
+    return sys_info
