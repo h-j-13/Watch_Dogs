@@ -8,16 +8,24 @@
 - 总体CPU占用率
 - 总体内存占用率
 - 总体网络上下载速度
+- 各核心CPU占用率
+- 系统信息
+- 系统总内存
+- 系统启动时间
+- 系统平均负载
+- 系统磁盘占用
 
 reference   :   https://www.jianshu.com/p/deb0ed35c1c2
 reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
 """
 
+from os import statvfs
 from time import sleep, time
 
 calc_func_interval = 2
 prev_cpu_work_time = 0
 prev_cpu_total_time = 0
+prev_cpu_time_by_cores = {}
 prev_net_receive_byte = 0
 prev_net_send_byte = 0
 prev_net_time = 0
@@ -127,6 +135,42 @@ def calc_cpu_percent(interval=calc_func_interval):
     cpu_percent = (current_work_time - prev_cpu_work_time) * 100.0 / (current_total_time - prev_cpu_total_time)
     prev_cpu_total_time, prev_cpu_work_time = current_total_time, current_work_time
     return cpu_percent
+
+
+def get_cpu_total_time_by_cores():
+    """获取各核心cpu时间 - /proc/stat"""
+    cpu_total_times = {}
+
+    with open("/proc/stat", "r") as cpu_stat:
+        for line in cpu_stat:
+            if line.startswith("cpu"):
+                cpu_name = line.split(' ')[0].strip()
+                if cpu_name != "cpu":
+                    user, nice, system, idle, iowait, irq, softirq, steal, guest, guestnice = \
+                        map(int, line.split(' ')[1:])
+                    cpu_total_times[cpu_name] = [user + nice + system + idle + iowait + irq + softirq + steal,
+                                                 user + nice + system]
+
+    return cpu_total_times
+
+
+def calc_cpu_percent_by_cores(interval=calc_func_interval):
+    """计算CPU各核占用率 (返回的是百分比)"""
+
+    cpu_percent_by_cores = {}
+    global prev_cpu_time_by_cores
+    if not prev_cpu_time_by_cores:  # 未初始化
+        prev_cpu_time_by_cores = get_cpu_total_time_by_cores()
+        sleep(interval)
+    current_cpu_time_by_cores = get_cpu_total_time_by_cores()
+
+    for cpu_name in current_cpu_time_by_cores.keys():
+        cpu_percent_by_cores[cpu_name] = \
+            (current_cpu_time_by_cores[cpu_name][1] - prev_cpu_time_by_cores[cpu_name][1]) * 100.0 / \
+            (current_cpu_time_by_cores[cpu_name][0] - prev_cpu_time_by_cores[cpu_name][0])
+    prev_cpu_time_by_cores = current_cpu_time_by_cores
+
+    return cpu_percent_by_cores
 
 
 def get_mem_info():
@@ -452,3 +496,149 @@ def get_sys_total_mem():
         MemTotal = mem_info.readline().split(":")[1].strip().strip("kB")
 
     return MemTotal
+
+
+def get_sys_loadavg():
+    """获取系统平均负载 - /proc/loadavg"""
+
+    """
+    /proc/loadavg
+    
+    The first three fields in this file are load average figures giving the number of jobs in the run queue (state R) or
+    waiting for disk I/O (state D) averaged over 1, 5, and 15 minutes.  They are the same as the load average numbers 
+    given by uptime(1) and other programs.  The fourth field consists of two numbers separated by a slash (/).  
+    The first of these is the number  of  currently  runnable  kernel  scheduling  entities  (processes,threads).  
+    The value after the slash is the number of kernel scheduling entities that currently exist on the system.  
+    The fifth field is the PID of the process that was most recently created on the system.
+    """
+
+    la = {}
+
+    with open("/proc/loadavg", "r") as loadavg:
+        la['lavg_1'], la['lavg_5'], la['lavg_15'], la['nr'], la['last_pid'] = \
+            loadavg.readline().split()
+
+    return la
+
+
+def get_sys_uptime():
+    """获取系统运行时间 - /proc/uptime"""
+
+    """
+    /proc/uptime
+    
+    This file contains two numbers: the uptime of the system (seconds), 
+    and the amount of time spent in idle process (seconds).
+    """
+
+    def second2time_str(sec):
+        m, s = divmod(sec, 60)
+        h, m = divmod(m, 60)
+        d, h = divmod(h, 24)
+        return "%d Days %d hours %02d min %02d secs" % (d, h, m, s)
+
+    ut = {}
+    with open("/proc/uptime", "r") as uptime:
+        system_uptime, idle_time = map(float, uptime.readline().split())
+        ut["system_uptime"] = second2time_str(int(system_uptime))
+        ut["idle_time"] = idle_time
+        ut["free rate"] = idle_time / system_uptime
+
+    return ut
+
+
+def get_disk_stat(style='G'):
+    """获取磁盘占用情况"""
+
+    # statvfs() http://www.runoob.com/python/os-statvfs.html
+    # reference pydf - https://github.com/k4rtik/pydf/tree/c59c16df1d1086d03f8948338238bf380431deb9
+    disk_stat = []
+
+    def get_all_mount_points():
+        """获取所有挂载点 - /proc/mounts"""
+
+        """
+        /proc/mounts
+    
+        Before kernel 2.4.19, this file was a list of all the filesystems currently mounted on the system.  
+        With the introduction of per-process mount namespaces in Linux 2.4.19 (see mount_namespaces(7)), this file became a link
+        to /proc/self/mounts, which lists the mount points of the process's own mount namespace.  
+        The format of this file is documented in fstab(5).
+        """
+
+        mount_points = {}
+        with open("/proc/mounts", "r") as mounts:
+            for line in mounts.readlines():
+                spl = line.split()
+                if len(spl) < 4:
+                    print(repr(line))
+                    continue
+                device, mp, typ, opts = spl[0:4]
+                opts = opts.split(',')
+                mount_points[mp] = (device, typ, opts)
+
+        return mount_points
+
+    def is_remote_fs(fs):
+        """test if fs (as type) is a remote one"""
+
+        # reference pydf - https://github.com/k4rtik/pydf/tree/c59c16df1d1086d03f8948338238bf380431deb9
+
+        return fs.lower() in ["nfs", "smbfs", "cifs", "ncpfs", "afs", "coda",
+                              "ftpfs", "mfs", "sshfs", "fuse.sshfs", "nfs4"]
+
+    def is_special_fs(fs):
+        """test if fs (as type) is a special one
+        in addition, a filesystem is special if it has number of blocks equal to 0"""
+
+        # reference pydf - https://github.com/k4rtik/pydf/tree/c59c16df1d1086d03f8948338238bf380431deb9
+
+        return fs.lower() in ["tmpfs", "devpts", "devtmpfs", "proc", "sysfs", "usbfs", "devfs", "fdescfs", "linprocfs"]
+
+    mp = get_all_mount_points()
+
+    for mount_point in mp.keys():
+        device, fstype, opts = mp[mount_point]
+
+        # 过滤掉非物理磁盘
+        if is_special_fs(fstype):
+            continue
+        try:
+            disk_status = statvfs(mount_point)
+        except (OSError, IOError):
+            continue
+
+        # 处理磁盘数据
+        fs_blocksize = disk_status.f_bsize
+        if not fs_blocksize:
+            fs_blocksize = disk_status.f_frsize
+
+        free = disk_status.f_bfree * fs_blocksize
+        total = disk_status.f_blocks * fs_blocksize
+        avail = disk_status.f_bavail * fs_blocksize
+        used = total - free
+
+        # 忽略系统相关挂载点(大小为0)
+        if not total:
+            continue
+
+        used_percent = round(used * 100.0 / total, 2)
+
+        # 设置返回结果单位(默认为G)
+        style_size = 1024.0 ** 3
+        if style == 'M':
+            style_size = 1024.0 ** 2
+        elif style == 'T':
+            style_size = 1024.0 ** 4
+
+        # 磁盘状态 : 设备, 文件系统, 总大小, 已用大小, 使用率, 挂载点
+        disk_stat.append(
+            (device,
+             fstype,
+             str(round(total / style_size, 2)) + style,
+             str(round(used / style_size, 2)) + style,
+             used_percent,
+             mount_point)
+        )
+
+        return disk_stat
