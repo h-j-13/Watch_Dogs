@@ -635,8 +635,8 @@ def get_disk_stat(style='G'):
         disk_stat.append(
             (device,
              fstype,
-             str(round(total / style_size, 2)) + style,
-             str(round(used / style_size, 2)) + style,
+             round(total / style_size, 2),
+             round(used / style_size, 2),
              used_percent,
              mount_point)
         )
