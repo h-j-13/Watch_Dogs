@@ -641,4 +641,4 @@ def get_disk_stat(style='G'):
              mount_point)
         )
 
-        return disk_stat
+    return disk_stat
