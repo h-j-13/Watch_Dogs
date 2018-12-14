@@ -13,7 +13,7 @@ reference   :   https://www.jianshu.com/p/deb0ed35c1c2
 reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
 """
 
-from os import listdir
+import os
 from copy import deepcopy
 from time import time, sleep
 
@@ -44,7 +44,7 @@ def get_all_pid():
         except ValueError:
             return False
 
-    return filter(isDigit, listdir("/proc"))
+    return filter(isDigit, os.listdir("/proc"))
 
 
 def get_process_info(pid):
@@ -278,7 +278,7 @@ def get_process_cpu_time(pid):
 
 
 def calc_process_cpu_percent(pid, interval=calc_func_interval):
-    """计算进程CPU使用率"""
+    """计算进程CPU使用率 (计算的cpu总体占用率)"""
     global all_process_info_dict, process_info_dict
     all_process_info_dict["pid"].add(pid)
     all_process_info_dict["process_info"][str(pid)] = deepcopy(process_info_dict)  # 添加一个全新的进程数据结构副本
@@ -290,17 +290,55 @@ def calc_process_cpu_percent(pid, interval=calc_func_interval):
 
     current_cpu_total_time = get_total_cpu_time()[0]
     current_process_cpu_time = get_process_cpu_time(pid)
-    process_cpu_percent = ( current_process_cpu_time - all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"])\
+    process_cpu_percent = (current_process_cpu_time - all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"]) \
                           * 100.0 / (current_cpu_total_time - all_process_info_dict["prev_cpu_total_time"])
 
     all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"] = current_process_cpu_time
     all_process_info_dict["prev_cpu_total_time"] = current_cpu_total_time
 
     return process_cpu_percent
-# todo : 考虑当进程挂掉时的逻辑
-if __name__ == '__main__':
-    import time
 
-    while 1:
-        time.sleep(5)
-        print calc_process_cpu_percent(19712)
+
+def get_path_total_size(path, style='M'):
+    """获取文件夹总大小(默认MB)"""
+    total_size = 0
+    # 通过 os.walk() 获取所有文件并计算总大小
+    for dir_path, dir_names, file_names in os.walk(path):
+        for fn in file_names:
+            try:
+                total_size += os.path.getsize(os.path.join(dir_path, fn))
+            except (OSError, IOError):
+                continue
+    # 调整返回单位大小
+    if style == 'M':
+        return round(total_size / 1024. ** 2, 2)
+    elif style == 'G':
+        return round(total_size / 1024. ** 3, 2)
+    else:  # 'KB'
+        return round(total_size / 1024., 2)
+
+
+def get_path_avail_size(path, style='G'):
+    """获取文件夹所在路径剩余可用大小"""
+    path_stat = os.statvfs(path)
+    avail_size = path_stat.f_bavail * path_stat.f_frsize
+
+    # 调整返回单位大小
+    if style == 'M':
+        return round(avail_size / 1024. ** 2, 2)
+    elif style == 'G':
+        return round(avail_size / 1024. ** 3, 2)
+    else:  # 'KB'
+        return round(avail_size / 1024., 2)
+
+
+# todo : 考虑当进程挂掉时的逻辑
+# 参考psutil的代码 - 新构建一个error表示进程不存在或者失效 判断逻辑是是读取  /proc/pid/.. 是发生的文件不存在异常
+# 通过一个函数装饰器实现上述逻辑
+# 最外层在处理这个新的异常类即可
+
+
+if __name__ == '__main__':
+    path = "/home/ubuntu/anaconda2"
+    print get_path_total_size(path)
+    print get_path_avail_size(path)
