@@ -32,6 +32,14 @@ all_process_info_dict["pre_time"] = 0  # 时间片(用于计算各种占用率)
 process_info_dict = {}
 process_info_dict["prev_cpu_time"] = 0
 
+# 系统内核数据
+MEM_PAGE_SIZE = 4  # KB
+
+# todo : 考虑当进程挂掉时的逻辑
+# 参考psutil的代码 - 新构建一个error表示进程不存在或者失效 判断逻辑是是读取  /proc/pid/.. 是发生的文件不存在异常
+# 通过一个函数装饰器实现上述逻辑
+# 最外层在处理这个新的异常类即可
+
 
 def get_all_pid():
     """获取所有进程号"""
@@ -332,13 +340,96 @@ def get_path_avail_size(path, style='G'):
         return round(avail_size / 1024., 2)
 
 
-# todo : 考虑当进程挂掉时的逻辑
-# 参考psutil的代码 - 新构建一个error表示进程不存在或者失效 判断逻辑是是读取  /proc/pid/.. 是发生的文件不存在异常
-# 通过一个函数装饰器实现上述逻辑
-# 最外层在处理这个新的异常类即可
+def get_process_mem(pid, style='M'):
+    """获取进程占用内存 /proc/pid/stat"""
+
+    """
+    /proc/[pid]/stat
+                  
+    (23) vsize  %lu
+        Virtual memory size in bytes.
+    
+    (24) rss  %ld
+        Resident Set Size: number of pages the process has in real memory.  
+        This is just the pages which count toward text, data, or stack space.  
+        This does not include pages which have not been  demand-loaded  in,  or which are swapped out.
+    """
+
+    with open("/proc/{}/stat".format(pid), "r") as p_stat:
+        p_data = p_stat.readline()
+
+    global MEM_PAGE_SIZE
+    # 进程实际占用内存 = rss * page size
+    if style == 'M':
+        return round(int(p_data.split()[23]) * MEM_PAGE_SIZE / 1024., 2)
+    elif style == 'G':
+        return round(int(p_data.split()[23]) * MEM_PAGE_SIZE / 1024. ** 2, 2)
+    else:  # K
+        return int(p_data.split()[23]) * MEM_PAGE_SIZE
+
+def get_process_io(pid,style='M'):
+    """获取进程读写数据 - /proc/pid/io"""
+
+    """
+    /proc/[pid]/io (since kernel 2.6.20)
+              
+    This file contains I/O statistics for the process, for example:
+
+    # cat /proc/3828/io
+    rchar: 323934931
+    wchar: 323929600
+    syscr: 632687
+    syscw: 632675
+    read_bytes: 0
+    write_bytes: 323932160
+    cancelled_write_bytes: 0
+
+    The fields are as follows:
+
+    rchar:  characters read
+            The number of bytes which this task has caused to be read from storage.  This is simply the sum of bytes 
+            which this process passed to read(2) and similar system calls.  It includes things such as terminal I/O  and
+            is unaffected by whether or not actual physical disk I/O was required 
+            (the read might have been satisfied from pagecache).
+
+    wchar: characters written
+            The number of bytes which this task has caused, or shall cause to be written to disk.  
+            Similar caveats apply here as with rchar.
+
+    syscr: read syscalls
+            Attempt to count the number of read I/O operations—that is, system calls such as read(2) and pread(2).
+
+    syscw: write syscalls
+            Attempt to count the number of write I/O operations—that is, system calls such as write(2) and pwrite(2).
+
+    read_bytes: bytes read
+            Attempt to count the number of bytes which this process really did cause to be fetched from the storage layer.  This is accurate for block-backed filesystems.
+
+    write_bytes: bytes written
+            Attempt to count the number of bytes which this process caused to be sent to the storage layer.
+
+    cancelled_write_bytes:
+            The  big  inaccuracy  here  is truncate.  If a process writes 1MB to a file and then deletes the file, 
+            it will in fact perform no writeout.  But it will have been accounted as having caused 1MB of write.  
+            In other words: this field represents the number of bytes which this process caused to not happen, 
+            by truncating pagecache.  A task can cause "negative" I/O too.  
+            If this task truncates some dirty pagecache, some I/O which
+            another task has been accounted for (in its write_bytes) will not be happening.
+
+    Note:  In  the  current implementation, things are a bit racy on 32-bit systems: 
+            if process A reads process B's /proc/[pid]/io while process B is updating one of these 64-bit counters, 
+            process A could see an intermediate result.
+
+    Permission to access this file is governed by a ptrace access mode PTRACE_MODE_READ_FSCREDS check; see ptrace(2).
+    """
+
+    with open("/proc/{}/io".format(pid), "r") as p_io:
+        for l in p_io:
+            print l
+
+    # todo fix Permission denied 问题
+
 
 
 if __name__ == '__main__':
-    path = "/home/ubuntu/anaconda2"
-    print get_path_total_size(path)
-    print get_path_avail_size(path)
+    print get_process_io(15637)
