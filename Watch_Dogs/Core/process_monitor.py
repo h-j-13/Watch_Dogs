@@ -428,7 +428,8 @@ def get_process_io(pid,style='M'):
             print l
 
     # todo fix Permission denied 问题
-
+    
+    # fix : 权限问题最好通过 setcap 命令解决 而非setuid 或者 root下运行
 
 
 if __name__ == '__main__':
