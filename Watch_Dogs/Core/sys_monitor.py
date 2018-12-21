@@ -22,6 +22,8 @@ reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
 from os import statvfs
 from time import sleep, time
 
+from prcess_exception import wrap_process_exceptions
+
 calc_func_interval = 2
 prev_cpu_work_time = 0
 prev_cpu_total_time = 0
@@ -31,6 +33,7 @@ prev_net_send_byte = 0
 prev_net_time = 0
 
 
+@wrap_process_exceptions
 def get_total_cpu_time():
     """获取总cpu时间 - /proc/stat"""
 
@@ -137,6 +140,7 @@ def calc_cpu_percent(interval=calc_func_interval):
     return cpu_percent
 
 
+@wrap_process_exceptions
 def get_cpu_total_time_by_cores():
     """获取各核心cpu时间 - /proc/stat"""
     cpu_total_times = {}
@@ -173,6 +177,7 @@ def calc_cpu_percent_by_cores(interval=calc_func_interval):
     return cpu_percent_by_cores
 
 
+@wrap_process_exceptions
 def get_mem_info():
     """获取内存信息 - /proc/meminfo"""
 
@@ -391,6 +396,7 @@ def calc_mem_percent():
     return mem_percent
 
 
+@wrap_process_exceptions
 def get_net_dev_data():
     """获取系统网络数据 -  /proc/net/dev"""
 
@@ -419,6 +425,7 @@ def get_net_dev_data():
     return receive_bytes, send_bytes
 
 
+@wrap_process_exceptions
 def calc_net_speed(interval=calc_func_interval):
     """
     计算网络速度
@@ -438,6 +445,7 @@ def calc_net_speed(interval=calc_func_interval):
     return download_speed, upload_speed
 
 
+@wrap_process_exceptions
 def get_cpu_info():
     """系统CPU信息 - /proc/cpuinfo"""
 
@@ -468,6 +476,7 @@ def get_cpu_info():
     return result
 
 
+@wrap_process_exceptions
 def get_sys_info():
     """系统信息 - /proc/version"""
 
@@ -489,6 +498,7 @@ def get_sys_info():
     return sys_info
 
 
+@wrap_process_exceptions
 def get_sys_total_mem():
     """获取总内存大小 - /proc/meminfo"""
 
@@ -498,6 +508,7 @@ def get_sys_total_mem():
     return MemTotal
 
 
+@wrap_process_exceptions
 def get_sys_loadavg():
     """获取系统平均负载 - /proc/loadavg"""
 
@@ -521,6 +532,7 @@ def get_sys_loadavg():
     return la
 
 
+@wrap_process_exceptions
 def get_sys_uptime():
     """获取系统运行时间 - /proc/uptime"""
 

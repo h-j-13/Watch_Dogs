@@ -17,6 +17,7 @@ import os
 from copy import deepcopy
 from time import time, sleep
 
+from prcess_exception import wrap_process_exceptions, AccessDenied, NoSuchProcess, ZombieProcess
 from sys_monitor import get_total_cpu_time
 
 calc_func_interval = 2
@@ -35,12 +36,9 @@ process_info_dict["prev_cpu_time"] = 0
 # 系统内核数据
 MEM_PAGE_SIZE = 4  # KB
 
-# todo : 考虑当进程挂掉时的逻辑
-# 参考psutil的代码 - 新构建一个error表示进程不存在或者失效 判断逻辑是是读取  /proc/pid/.. 是发生的文件不存在异常
-# 通过一个函数装饰器实现上述逻辑
-# 最外层在处理这个新的异常类即可
 
 
+@wrap_process_exceptions
 def get_all_pid():
     """获取所有进程号"""
 
@@ -55,6 +53,7 @@ def get_all_pid():
     return filter(isDigit, os.listdir("/proc"))
 
 
+@wrap_process_exceptions
 def get_process_info(pid):
     """获取进程信息 - /proc/[pid]/stat"""
     with open("/proc/{}/stat".format(pid), "r") as p_stat:
@@ -70,6 +69,7 @@ def get_process_info(pid):
     }
 
 
+@wrap_process_exceptions
 def get_process_cpu_time(pid):
     """获取进程cpu时间片 - /proc/[pid]/stat"""
 
@@ -307,6 +307,7 @@ def calc_process_cpu_percent(pid, interval=calc_func_interval):
     return process_cpu_percent
 
 
+@wrap_process_exceptions
 def get_path_total_size(path, style='M'):
     """获取文件夹总大小(默认MB)"""
     total_size = 0
@@ -326,6 +327,7 @@ def get_path_total_size(path, style='M'):
         return round(total_size / 1024., 2)
 
 
+@wrap_process_exceptions
 def get_path_avail_size(path, style='G'):
     """获取文件夹所在路径剩余可用大小"""
     path_stat = os.statvfs(path)
@@ -340,6 +342,7 @@ def get_path_avail_size(path, style='G'):
         return round(avail_size / 1024., 2)
 
 
+@wrap_process_exceptions
 def get_process_mem(pid, style='M'):
     """获取进程占用内存 /proc/pid/stat"""
 
@@ -367,7 +370,9 @@ def get_process_mem(pid, style='M'):
     else:  # K
         return int(p_data.split()[23]) * MEM_PAGE_SIZE
 
-def get_process_io(pid,style='M'):
+
+@wrap_process_exceptions
+def get_process_io(pid, style='M'):
     """获取进程读写数据 - /proc/pid/io"""
 
     """
@@ -424,13 +429,12 @@ def get_process_io(pid,style='M'):
     """
 
     with open("/proc/{}/io".format(pid), "r") as p_io:
-        for l in p_io:
-            print l
+        pass
 
     # todo fix Permission denied 问题
-    
+
     # fix : 权限问题最好通过 setcap 命令解决 而非setuid 或者 root下运行
 
 
 if __name__ == '__main__':
-    print get_process_io(15637)
+    get_process_io(26734)
