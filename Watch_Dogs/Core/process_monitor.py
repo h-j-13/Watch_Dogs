@@ -20,7 +20,7 @@ reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
 
 import os
 from copy import deepcopy
-from time import time, sleep
+from time import time, sleep, localtime, strftime
 
 from prcess_exception import wrap_process_exceptions, AccessDenied, NoSuchProcess, ZombieProcess
 from sys_monitor import get_total_cpu_time
@@ -438,7 +438,7 @@ def get_process_io(pid):
     # rchar vs read_bytes
     # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/filesystems/proc.txt?id=HEAD#l1305
     # https://stackoverflow.com/search?q=%2F+proc+%2F+%5Bpid%5D+%2F+io
-
+    #
     # Note 有关部分/proc无法读取所触发的 Permission denied 问题
     # -----------------------------------------------------
     # 1. 改用root权限登录执行即可
@@ -543,8 +543,54 @@ def get_process_net_info():
     pass
 
 
+def is_log_exist(path):
+    """判断日志文件是否存在 (输入绝对路径)"""
+    return os.path.exists(path) and os.path.isfile(path) and os.access(path, os.R_OK)
 
+
+def get_log_tail(path, n=10):
+    """获取日志文件最后几行"""
+
+    # author    : Armin Ronacher
+    # reference : https://stackoverflow.com/questions/136168/get-last-n-lines-of-a-file-with-python-similar-to-tail
+    def tail(f, n, offset=0):
+        """Reads a n lines from f with an offset of offset lines."""
+        avg_line_length = 74
+        to_read = n + offset
+        while 1:
+            try:
+                f.seek(-(avg_line_length * to_read), 2)
+            except IOError:
+                # woops.  apparently file is smaller than what we want
+                # to step back, go to the beginning instead
+                f.seek(0)
+            pos = f.tell()
+            lines = f.read().splitlines()
+            if len(lines) >= to_read or pos == 0:
+                return lines[-to_read:offset and -offset or None]
+            avg_line_length *= 1.3
+
+    with open(path, 'r') as log_f:
+        return tail(log_f, n)
+
+
+def get_log_last_update_time(path):
+    """获取文件最后更新时间"""
+    return strftime('%Y-%m-%d %H:%M:%S', localtime(os.stat(path).st_atime))
+
+
+def get_log_keyword_lines(path, keyword):
+    """获取日志文件含有关键词的行"""
+    result = []
+    n = 1
+    with open(path, 'r') as log_f:
+        for line in log_f:
+            if keyword in line:
+                result.append((n, line.strip()))
+            n += 1
+
+    return result
 
 
 if __name__ == '__main__':
-    print get_process_io(875)
+    print get_log_keyword_lines('/home/houjie/Watch_Dogs/Watch_Dogs/Core/log.txt','[')
