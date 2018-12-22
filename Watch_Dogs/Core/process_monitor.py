@@ -27,15 +27,15 @@ all_process_info_dict = {}
 all_process_info_dict["pid"] = set()  # 关注的进程pid
 all_process_info_dict["process_info"] = {}  # 关注进程的相关信息
 all_process_info_dict["prev_cpu_total_time"] = 0  # 上次记录的总CPU时间片
-all_process_info_dict["pre_time"] = 0  # 时间片(用于计算各种占用率)
 
 # 标准进程相关信息数据结构
 process_info_dict = {}
-process_info_dict["prev_cpu_time"] = 0
+process_info_dict["pre_time"] = 0  # 时间片(用于计算各种占用率 - 注意,这里是整个进程公用的)
+process_info_dict["prev_cpu_time"] = None
+process_info_dict["prev_io"] = None
 
 # 系统内核数据
 MEM_PAGE_SIZE = 4  # KB
-
 
 
 @wrap_process_exceptions
@@ -288,10 +288,12 @@ def get_process_cpu_time(pid):
 def calc_process_cpu_percent(pid, interval=calc_func_interval):
     """计算进程CPU使用率 (计算的cpu总体占用率)"""
     global all_process_info_dict, process_info_dict
-    all_process_info_dict["pid"].add(pid)
-    all_process_info_dict["process_info"][str(pid)] = deepcopy(process_info_dict)  # 添加一个全新的进程数据结构副本
+    # 初始化 - 添加进程信息
+    if int(pid) not in all_process_info_dict["pid"]:
+        all_process_info_dict["pid"].add(int(pid))
+        all_process_info_dict["process_info"][str(pid)] = deepcopy(process_info_dict)  # 添加一个全新的进程数据结构副本
 
-    if not all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"]:
+    if all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"] is None:
         all_process_info_dict["prev_cpu_total_time"] = get_total_cpu_time()[0]
         all_process_info_dict["process_info"][str(pid)]["prev_cpu_time"] = get_process_cpu_time(pid)
         sleep(interval)
@@ -372,7 +374,7 @@ def get_process_mem(pid, style='M'):
 
 
 @wrap_process_exceptions
-def get_process_io(pid, style='M'):
+def get_process_io(pid):
     """获取进程读写数据 - /proc/pid/io"""
 
     """
@@ -428,13 +430,110 @@ def get_process_io(pid, style='M'):
     Permission to access this file is governed by a ptrace access mode PTRACE_MODE_READ_FSCREDS check; see ptrace(2).
     """
 
+    # rchar vs read_bytes
+    # https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/filesystems/proc.txt?id=HEAD#l1305
+    # https://stackoverflow.com/search?q=%2F+proc+%2F+%5Bpid%5D+%2F+io
+
+    # Note 有关部分/proc无法读取所触发的 Permission denied 问题
+    # -----------------------------------------------------
+    # 1. 改用root权限登录执行即可
+    #
+    # 2. SETUID, SETGIT - reference : https://blog.csdn.net/qq_38132048/article/details/78302582
+    # 进程运行时能够访问哪些资源或文件，不取决于进程文件的属主属组，而是取决于运行该命令的用户身份的uid/gid，以该身份获取各种系统资源。
+    # 对一个属主为root的可执行文件，如果设置了SUID位，则其他所有普通用户都将可以以root身份运行该文件，获取相应的系统资源。
+    # 可以简单地理解为让普通用户拥有可以执行“只有root权限才能执行”的特殊权限。
+    # setuid，setuid的作用是让执行该命令的用户以该命令拥有者的权限去执行，比如普通用户执行passwd时会拥有root的权限，
+    # 这样就可以修改/etc/passwd这个文件了。它的标志为：s，会出现在x的地方，例：-rwsr-xr-x  。而setgid的意思和它是一样的，
+    # 即让执行文件的用户以该文件所属组的权限去执行。
+    # Code Example :
+    # import os
+    # os.seteuid(0)
+    # >>> OSError: [Errno 1] Operation not permitted
+    # 但是执行seteuid(0)的时候也需要root权限 - -!
+    #
+    # 3. SETCAP - reference : https://linux.die.net/man/8/setcap
+    #             reference : https://www.jianshu.com/p/deb0ed35c1c2
+    # **用setcap替换setuid的方式给予读取系统目录的权限**
+    #
+    # 上面讲解了深度系统监视器的核心模块的原理和代码参考实现，我们会发现大部分都要读取系统目录 /proc,
+    # /proc这个目录的大部分内容只有root用户才有权限读取。
+    # 很多初学者喜欢用setuid的方式直接赋予二进制root权限，但是这样非常危险，会造成图形前端获得过大的权限，从而产生安全漏洞。
+    # Linux内核针对这种情况有更好的实现方式，用 setcap 给予二进制特定的权限，保证二进制的特殊权限在最小的范围中，
+    # 比如在深度系统监视器中就用命令：
+    # sudo setcap cap_kill,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+ep ./deepin-system-monitor
+    #
+    # 来给予进程相应的能力，比如：
+    # cap_net_raw 对应网络文件读取权限
+    # cap_dac_read_search 对应文件读取检查权限
+    # cap_sys_ptrace 对应进程内存信息读取权限
+    # 这样，在保证二进制有对应读取权限的同时，又保证了二进制最小化的权限范围，最大化的保证了应用和系统的安全。
+    #
+    # 但是setcap只能用于授予可执行文件(c编译出来的文件)相应的权限,如果给python源代码文件(.py文件)授予权限后,依然正常使用
+    # =====Eg=====
+    #  houjie@houjie  ~/Watch_Dogs/Watch_Dogs/Core/dist  ./process_monitor
+    # Traceback (most recent call last):
+    #   File "Watch_Dogs/Core/process_monitor.py", line 450, in <module>
+    #   File "Watch_Dogs/Core/prcess_exception.py", line 109, in wrapper
+    # prcess_exception.AccessDenied: Access Denied (pid=875)
+    # [9453] Failed to execute script process_monitor
+    #  ✘ houjie@houjie  ~/Watch_Dogs/Watch_Dogs/Core/dist  sudo setcap cap_kill,cap_net_raw,
+    #  cap_dac_read_search,cap_sys_ptrace+ep ./process_monitor
+    #  houjie@houjie  ~/Watch_Dogs/Watch_Dogs/Core/dist  ./process_monitor
+    # rchar: 18389336
+    # wchar: 30947737
+    # syscr: 1027
+    # syscw: 6249
+    # read_bytes: 65286144
+    # write_bytes: 47058944
+    # cancelled_write_bytes: 1523712
+    # 在通过python调用可执行文件的方式获取结果?
+    #
+    # 目前最为'优雅'的解决办法:
+    # 给python解释器提权 sudo setcap cap_kill,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+ep ./python2.7
+    # 这样python在读取文件时候就可以无障碍了,但是存在的问题就是这台机器上的python可以获取任意读取所有文件的权限. 甚至于/etc/passwd
+    # 但是由于setcap的关系,只给了python解释器最小的权限. 并不存在进行删除或者其他危险操作的权限,相比于1,2 还是更为安全一点
+    #
+    # 4. PyInstaller - reference : http://www.cnblogs.com/mywolrd/p/4756005.html
+    # 通过PyInstaller将核心内容打包成可执行文件后,用setcap提权(看起来是最优雅的,待完成所有功能后试一下,如何交互呢?)
+    # ...待完善
+
     with open("/proc/{}/io".format(pid), "r") as p_io:
-        pass
+        rchar = p_io.readline().split(':')[1].strip()
+        wchar = p_io.readline().split(':')[1].strip()
 
-    # todo fix Permission denied 问题
+    return map(int, [rchar, wchar])
 
-    # fix : 权限问题最好通过 setcap 命令解决 而非setuid 或者 root下运行
+
+def calc_process_cpu_io(pid, interval=calc_func_interval):
+    """计算进程的磁盘IO速度 (单位MB/s)"""
+    global all_process_info_dict, process_info_dict
+    # 初始化 - 添加进程信息
+    if int(pid) not in all_process_info_dict["pid"]:
+        all_process_info_dict["pid"].add(int(pid))
+        all_process_info_dict["process_info"][str(pid)] = deepcopy(process_info_dict)  # 添加一个全新的进程数据结构副本
+
+    # 添加数据结构信息
+    if all_process_info_dict["process_info"][str(pid)]["prev_io"] is None:
+        all_process_info_dict["process_info"][str(pid)]["prev_io"] = get_process_io(pid)
+        all_process_info_dict["process_info"][str(pid)]["pre_time"] = time()
+        sleep(interval)
+
+    current_time = time()
+    current_rchar, current_wchar = get_process_io(pid)
+
+    # 注意,这里为了计算磁盘的IO,除以的数字是1000而不是1024
+    read_MBs = (current_rchar - all_process_info_dict["process_info"][str(pid)]["prev_io"][0]) \
+               / 1000. ** 2 / (current_time - all_process_info_dict["process_info"][str(pid)]["pre_time"])
+    write_MBs = (current_wchar - all_process_info_dict["process_info"][str(pid)]["prev_io"][1]) \
+                / 1000. ** 2 / (current_time - all_process_info_dict["process_info"][str(pid)]["pre_time"])
+
+    all_process_info_dict["process_info"][str(pid)]["prev_io"] = [current_rchar, current_wchar]
+    all_process_info_dict["process_info"][str(pid)]["pre_time"] = current_time
+
+    return [round(read_MBs, 2), round(write_MBs, 2)]
 
 
 if __name__ == '__main__':
-    get_process_io(26734)
+    while 1:
+        sleep(1)
+        print calc_process_cpu_io(875)
