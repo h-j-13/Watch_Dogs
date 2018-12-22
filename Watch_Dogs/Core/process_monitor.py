@@ -8,6 +8,11 @@
 - 获取所有进程号
 - 获取进程基本信息
 - 获取进程CPU占用率
+- 获取路径文件夹总大小
+- 获取路径可用大小
+- 获取进程内存
+- 获取进程磁盘占用(需要root权限)
+- 获取进程网络监控?
 
 reference   :   https://www.jianshu.com/p/deb0ed35c1c2
 reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
@@ -490,6 +495,7 @@ def get_process_io(pid):
     #
     # 目前最为'优雅'的解决办法:
     # 给python解释器提权 sudo setcap cap_kill,cap_net_raw,cap_dac_read_search,cap_sys_ptrace+ep ./python2.7
+    # 取消权限 sudo setcap cap_sys_ptrace+ep ./python2.7
     # 这样python在读取文件时候就可以无障碍了,但是存在的问题就是这台机器上的python可以获取任意读取所有文件的权限. 甚至于/etc/passwd
     # 但是由于setcap的关系,只给了python解释器最小的权限. 并不存在进行删除或者其他危险操作的权限,相比于1,2 还是更为安全一点
     #
@@ -533,7 +539,12 @@ def calc_process_cpu_io(pid, interval=calc_func_interval):
     return [round(read_MBs, 2), round(write_MBs, 2)]
 
 
+def get_process_net_info():
+    pass
+
+
+
+
+
 if __name__ == '__main__':
-    while 1:
-        sleep(1)
-        print calc_process_cpu_io(875)
+    print get_process_io(875)
