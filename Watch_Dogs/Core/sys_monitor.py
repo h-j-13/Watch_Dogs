@@ -397,8 +397,48 @@ def calc_mem_percent():
 
 
 @wrap_process_exceptions
-def get_net_dev_data():
-    """获取系统网络数据 -  /proc/net/dev"""
+def get_all_net_device():
+    """获取所有网卡(不包括本地回环)"""
+
+    # Note : 网卡命名规则
+    # lo        -   本地回环
+    # eth0      -   物理网卡(数字代表第几个,下同)
+    # wlan0     -   无线网卡
+    # br0       -   网桥
+    # ens3      -   虚拟网卡 vps?
+    # ppp0      -   ppp拨号
+    # tpp0      -   ...
+
+    devices = []
+    with open("/proc/net/dev", "r") as net_dev:
+        for line in net_dev:
+            if not line.count("lo:") and line.count(":"):
+                devices.append(line.split(":")[0].strip())
+
+    return devices
+
+
+def get_default_net_device():
+    """获取默认网卡 - 默认选取流量最大的网卡作为默认监控网卡(本地回环除外)"""
+    devices = get_all_net_device()
+    default_net_device = 'eth0'
+
+    if default_net_device in devices:
+        return default_net_device
+
+    else:  # 获取流量最大的网卡作为默认网卡
+        temp_d = ''
+        max_byte = -1
+        for device_name in devices:
+            if max_byte < sum(get_net_dev_data(device_name)):
+                max_byte = get_net_dev_data(device_name)
+                temp_d = device_name
+        return temp_d
+
+
+@wrap_process_exceptions
+def get_net_dev_data(device):
+    """获取系统网络数据(某一网卡) -  /proc/net/dev"""
 
     """
     The dev pseudo-file contains network device status information.  This gives the number of received and sent packets, 
@@ -413,11 +453,11 @@ def get_net_dev_data():
         tap0:    7714      81    0    0    0     0          0         0     7714      81    0    0    0     0       0          0
 
     """
-    receive_bytes = 0
-    send_bytes = 0
+    receive_bytes = -1
+    send_bytes = -1
     with open("/proc/net/dev", "r") as net_dev:
-        for line in net_dev.readlines():
-            if line.count(":") and not line.count("lo"):
+        for line in net_dev:
+            if line.count(device):
                 dev_data = map(int, filter(lambda x: x, line.split(":", 2)[1].strip().split(" ")))
                 receive_bytes += dev_data[0]
                 send_bytes += dev_data[8]
@@ -426,17 +466,17 @@ def get_net_dev_data():
 
 
 @wrap_process_exceptions
-def calc_net_speed(interval=calc_func_interval):
+def calc_net_speed(device_name=get_default_net_device(), interval=calc_func_interval):
     """
-    计算网络速度
+    计算某一网卡的网络速度
     :return: [上传速度,下载速度] (单位为Kbps)
     """
     global prev_net_receive_byte, prev_net_send_byte, prev_net_time
     if prev_net_receive_byte == 0:  # 未初始化
-        prev_net_receive_byte, prev_net_send_byte = get_net_dev_data()
+        prev_net_receive_byte, prev_net_send_byte = get_net_dev_data(device_name)
         prev_net_time = time()
         sleep(interval)
-    current_net_receive_byte, current_net_send_byte = get_net_dev_data()
+    current_net_receive_byte, current_net_send_byte = get_net_dev_data(device_name)
     current_net_time = time()
     download_speed = (current_net_receive_byte - prev_net_receive_byte) / 1024.0 / (current_net_time - prev_net_time)
     upload_speed = (current_net_send_byte - prev_net_send_byte) / 1024.0 / (current_net_time - prev_net_time)
@@ -559,6 +599,7 @@ def get_sys_uptime():
     return ut
 
 
+@wrap_process_exceptions
 def get_disk_stat(style='G'):
     """获取磁盘占用情况"""
 
@@ -583,7 +624,6 @@ def get_disk_stat(style='G'):
             for line in mounts.readlines():
                 spl = line.split()
                 if len(spl) < 4:
-                    print(repr(line))
                     continue
                 device, mp, typ, opts = spl[0:4]
                 opts = opts.split(',')
@@ -654,3 +694,9 @@ def get_disk_stat(style='G'):
         )
 
     return disk_stat
+
+
+if __name__ == '__main__':
+    while 1:
+        sleep(1)
+        print calc_net_speed()
