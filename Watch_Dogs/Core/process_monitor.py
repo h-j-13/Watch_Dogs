@@ -13,6 +13,10 @@
 - 获取进程内存
 - 获取进程磁盘占用(需要root权限)
 - 获取进程网络监控?
+- 判断日志文件是否存在
+- 获取日志文件最后n行
+- 获取日志文件最后更新时间
+- 获取日志文件含有关键词的行
 
 reference   :   https://www.jianshu.com/p/deb0ed35c1c2
 reference   :   https://www.kernel.org/doc/Documentation/filesystems/proc.txt
@@ -538,6 +542,56 @@ def calc_process_cpu_io(pid, interval=calc_func_interval):
 
     return [round(read_MBs, 2), round(write_MBs, 2)]
 
+
+# Note : 获取进程的网络数据
+# 这里可能是整个系统最大的实现难点.
+# 实现的逻辑可以参考 https://www.jianshu.com/p/deb0ed35c1c2 中 <计算进程的网络IO数据> 这一部分
+#
+# 1. 获取进程的所有TCP链接的inode, /proc/pid/fd 目录下代表当前进程所有打开的文件描述符
+# 2. 列出系统中 TCP inode 对应的链接信息，通过命令/proc/net/tcp 可以得到当前 TCP inode 对应的链接信息列表，内容类似：
+# 3. 使用 libcap 抓包的方法，计算出每个TCP链接对应的网络流量后，
+#    然后反向通过步骤一的 pid <-> inode list 信息，最后计算出每个进程的网络流量。
+#
+# 这个完整实现的工作量基本就是一个毕设了. - -!
+#
+# 参考工具
+# nethogs : https://github.com/raboof/nethogs
+# hogwatch : https://github.com/akshayKMR/hogwatch(nethogs+python展示)
+# iftop : http://www.ex-parrot.com/~pdw/iftop/ (2017 更多的是针对链接的监控)
+# ifstat : http://gael.roualland.free.fr/ifstat/ (2004)
+#
+# Nethogs github下的
+# Nethogs监控每个进程进出机器的流量。其他工具则监控哪种类型的流量通过机器或从机器等运行。
+# 我会尝试在这里链接到这些工具。如果您了解另一个问题，请务必打开问题/公关：
+#
+# nettop显示数据包类型，按大小或数量的数据包排序。
+# ettercap是以太网的网络嗅探器/拦截器/记录器
+# darkstat通过主机，协议等来分解流量。旨在分析在较长时间内收集的流量，而不是“实时”查看。
+# iftop按服务和主机显示网络流量
+# ifstat以类似vmstat / iostat的方式通过接口显示网络流量
+# gnethogs基于GTK的GUI（正在进行中）
+# nethogs-qt基于Qt的GUI
+# hogwatch带有桌面/网络图形的带宽监视器（每个进程）。
+
+
+# #########################使用nethogs作为系统监控核心#####################
+
+# Setp - 0
+# 在nethogs的官方github页面上,提供了将nethogs编译成动态链接库供其它程序调用的方法(避免了丑陋的通过命令行方式调用)
+# 详细可参见 https://github.com/raboof/nethogs#libnethogs 这一段
+#
+# Step - 1
+# 主要步骤为:
+# apt-get install build-essential libncurses5-dev libpcap-dev
+# git clone https://github.com/raboof/nethogs.git
+# cd nethogs && make libnethogs && sudo make install_dev
+#
+# 之后根据屏幕输出的提示信息 动态链接库 libnethogs.so 已经创建在 /usr/local/lib 这个目录下了,现在就可以通过各种方式来调用它了
+#
+# Setp - 2
+# libnethogs.so 库主要函数功能说明详见 - https://github.com/raboof/nethogs/blob/master/src/libnethogs.h
+# 通过python调用的demo python-wrapper.py 可见 https://github.com/raboof/nethogs/blob/master/contrib/python-wrapper.py
+#
 
 def get_process_net_info():
     pass

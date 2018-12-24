@@ -30,7 +30,7 @@ device_names = []
 # LIBRARY_NAME has to be exact, although it doesn't need to include the full path.
 # The version tagged as 0.8.5 (download link below) builds a library with this name.
 # https://github.com/raboof/nethogs/archive/v0.8.5.tar.gz
-LIBRARY_NAME = 'libnethogs.so.0.8.5'
+LIBRARY_NAME = 'libnethogs.so'
 
 # EXPERIMENTAL: Optionally, specify a capture filter in pcap format (same as
 # used by tcpdump(1)) or None. See `man pcap-filter` for full information.
@@ -144,21 +144,22 @@ def run_monitor_loop(lib, devnames):
 
 
 def network_activity_callback(action, data):
-    print(datetime.datetime.now().strftime('@%H:%M:%S.%f'))
+    if data.contents.pid == 875:
+        print(datetime.datetime.now().strftime('@%H:%M:%S.%f'))
 
-    # Action type is either SET or REMOVE. I have never seen nethogs send an unknown action
-    # type, and I don't expect it to do so.
-    action_type = Action.MAP.get(action, 'Unknown')
+        # Action type is either SET or REMOVE. I have never seen nethogs send an unknown action
+        # type, and I don't expect it to do so.
+        action_type = Action.MAP.get(action, 'Unknown')
 
-    print('Action: {}'.format(action_type))
-    print('Record id: {}'.format(data.contents.record_id))
-    print('Name: {}'.format(data.contents.name))
-    print('PID: {}'.format(data.contents.pid))
-    print('UID: {}'.format(data.contents.uid))
-    print('Device name: {}'.format(data.contents.device_name.decode('ascii')))
-    print('Sent/Recv bytes: {} / {}'.format(data.contents.sent_bytes, data.contents.recv_bytes))
-    print('Sent/Recv kbs: {} / {}'.format(data.contents.sent_kbs, data.contents.recv_kbs))
-    print('-' * 30)
+        print('Action: {}'.format(action_type))
+        print('Record id: {}'.format(data.contents.record_id))
+        print('Name: {}'.format(data.contents.name))
+        print('PID: {}'.format(data.contents.pid))
+        print('UID: {}'.format(data.contents.uid))
+        print('Device name: {}'.format(data.contents.device_name.decode('ascii')))
+        print('Sent/Recv bytes: {} / {}'.format(data.contents.sent_bytes, data.contents.recv_bytes))
+        print('Sent/Recv kbs: {} / {}'.format(data.contents.sent_kbs, data.contents.recv_kbs))
+        print('-' * 30)
 
 #############       Main begins here      ##############
 
