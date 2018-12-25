@@ -25,7 +25,7 @@ import threading
 
 # You can use this to monitor only certain devices, like:
 # device_names = ['enp4s0', 'docker0']
-device_names = []
+device_names = ['ens3']
 
 # LIBRARY_NAME has to be exact, although it doesn't need to include the full path.
 # The version tagged as 0.8.5 (download link below) builds a library with this name.
@@ -39,6 +39,7 @@ LIBRARY_NAME = 'libnethogs.so'
 # example:
 # FILTER = 'port 80 or port 8080 or port 443'
 FILTER = None
+
 
 #####################
 # END CONFIGURATION #
@@ -56,6 +57,7 @@ class Action():
 
     MAP = {SET: 'SET', REMOVE: 'REMOVE'}
 
+
 class LoopStatus():
     """Return codes from nethogsmonitor_loop()"""
     OK = 0
@@ -63,6 +65,7 @@ class LoopStatus():
     NO_DEVICE = 2
 
     MAP = {OK: 'OK', FAILURE: 'FAILURE', NO_DEVICE: 'NO_DEVICE'}
+
 
 # The sent/received KB/sec values are averaged over 5 seconds; see PERIOD in nethogs.h.
 # https://github.com/raboof/nethogs/blob/master/src/nethogs.h#L43
@@ -160,6 +163,7 @@ def network_activity_callback(action, data):
         print('Sent/Recv bytes: {} / {}'.format(data.contents.sent_bytes, data.contents.recv_bytes))
         print('Sent/Recv kbs: {} / {}'.format(data.contents.sent_kbs, data.contents.recv_kbs))
         print('-' * 30)
+
 
 #############       Main begins here      ##############
 
