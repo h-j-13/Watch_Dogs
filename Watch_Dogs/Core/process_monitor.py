@@ -87,12 +87,30 @@ def get_process_info(pid):
 
     p_data = p_data.split(" ")
 
+    """
+    /proc/[pid]/task (since Linux 2.6.0-test6)
+    
+        This is a directory that contains one subdirectory for each thread in the process.  
+        The name of each subdirectory is the numerical thread ID ([tid]) of the thread (see gettid(2)).  
+        Within each  of  these  subdirectories,there  is  a set of files with the same names and contents as under 
+        the /proc/[pid] directories.  For attributes that are shared by all threads, the contents for each of 
+        the files under the task/[tid] subdirectories will be the same as in the corresponding file in 
+        the parent /proc/[pid] directory (e.g., in a multithreaded process, all of the task/[tid]/cwd files will 
+        have the same value as the /proc/[pid]/cwd file in  the  parent  directory,  since all of the threads in a
+        process share a working directory).  For attributes that are distinct for each thread, the corresponding 
+        files under task/[tid] may have different values (e.g., various fields in each of the task/[tid]/status files 
+        may be different for each thread), or they might not exist in /proc/[pid] at all.  
+        In a multithreaded process, the contents of the /proc/[pid]/task directory are not available if  the  main
+        thread has already terminated (typically by calling pthread_exit(3)).
+    """
+
     return {
         "pid": int(p_data[0]),
         "comm": p_data[1].strip(")").strip("("),
         "state": p_data[2],
         "ppid": int(p_data[3]),
-        "pgrp": int(p_data[4])
+        "pgrp": int(p_data[4]),
+        "thread num": len(os.listdir("/proc/{}/task".format(pid)))
     }
 
 
