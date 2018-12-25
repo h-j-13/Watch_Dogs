@@ -2,7 +2,7 @@
 # encoding:utf-8
 
 """
-进程检测核心功能实现 - 进程检测
+进程监测核心功能实现 - 进程监测
 
 主要包括
 - 获取所有进程号
@@ -46,7 +46,7 @@ all_process_info_dict["prev_cpu_total_time"] = 0  # 上次记录的总CPU时间�
 all_process_info_dict["libnethogs_thread"] = None  # nethogs进程流量监控线程
 all_process_info_dict["libnethogs_thread_install"] = False  # libnethogs是否安装成功
 all_process_info_dict["libnethogs"] = None  # nethogs动态链接库对象
-all_process_info_dict["libnethogs_data"] = {}  # nethogs检测进程流量数据
+all_process_info_dict["libnethogs_data"] = {}  # nethogs监测进程流量数据
 
 # 标准进程相关信息数据结构
 process_info_dict = {}
