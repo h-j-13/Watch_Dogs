@@ -103,6 +103,20 @@ def get_process_info(pid):
         In a multithreaded process, the contents of the /proc/[pid]/task directory are not available if  the  main
         thread has already terminated (typically by calling pthread_exit(3)).
     """
+    # os.listdir("/proc/{}/task".format(pid))
+
+    """
+    /proc/[pid]/cmdline
+        
+        This read-only file holds the complete command line for the process, unless the process is a zombie.  
+        In the latter case, there is nothing in this file: that is, a read on this file will return 0  characters. 
+        The  command-line arguments appear in this file as a set of strings separated by null bytes ('\0'), 
+        with a further null byte after the last string.
+
+    """
+
+    with open("/proc/{}/cmdline".format(pid), "r") as p_cmdline:
+        p_cmdline = p_cmdline.readline().replace('\0', ' ').strip()
 
     return {
         "pid": int(p_data[0]),
@@ -110,7 +124,8 @@ def get_process_info(pid):
         "state": p_data[2],
         "ppid": int(p_data[3]),
         "pgrp": int(p_data[4]),
-        "thread num": len(os.listdir("/proc/{}/task".format(pid)))
+        "thread num": len(os.listdir("/proc/{}/task".format(pid))),
+        "cmdline": p_cmdline
     }
 
 
