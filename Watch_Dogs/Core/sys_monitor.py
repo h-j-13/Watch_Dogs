@@ -694,9 +694,3 @@ def get_disk_stat(style='G'):
         )
 
     return disk_stat
-
-
-if __name__ == '__main__':
-    while 1:
-        sleep(1)
-        print calc_net_speed()
