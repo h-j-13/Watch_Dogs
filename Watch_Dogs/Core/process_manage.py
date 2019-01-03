@@ -13,7 +13,10 @@
 """
 
 from process_monitor import get_all_pid, get_process_info
-from prcess_exception import wrap_process_exceptions
+from prcess_exception import wrap_process_exceptions, NoSuchProcess, ZombieProcess, AccessDenied
+
+import os
+import signal
 
 
 def get_all_pid_name(name_type="cmdline"):
@@ -42,9 +45,65 @@ def search_pid_by_keyword(keyword, search_type='contain'):
     return res
 
 
+def kill_process(pid):
+    """关闭进程"""
+    try:
+        if get_process_info(pid)['state'] == 'Z':  # zombie process
+            raise ZombieProcess(pid)
+        os.kill(pid, signal.SIGKILL)
+    except OSError as e:
+        if e.args[0] == 1:  # Operation not permitted
+            raise AccessDenied(pid)
+        if e.args[0] == 3:  # No such process
+            raise NoSuchProcess(pid)
 
-# todo
-# 1. 获取同组进程
-# 2. 关闭进程
-# 3. 启动进程
-# 4. 重启进程
+
+def kill_process_group(pgid):
+    """关闭进程组"""
+    try:
+        if get_process_info(pgid)['state'] == 'Z':  # zombie process
+            raise ZombieProcess(pgid)
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError as e:
+        if e.args[0] == 1:  # Operation not permitted
+            raise AccessDenied(pgid)
+        if e.args[0] == 3:  # No such process
+            raise NoSuchProcess(pgid)
+
+# todo 获取同组进程
+
+def statr_process(cmd):
+    # todo 完成他
+    """创建一个新的进程(不随主进程退出,返回创建的进程好)"""
+    # reference : https://stackoverflow.com/questions/89228/calling-an-external-command-in-python/92395#92395
+    # reference : https://stackoverflow.com/questions/1196074/how-to-start-a-background-process-in-python
+
+    # from subprocess import call
+    # call(["python", "/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py"])
+
+    import subprocess
+    pid = subprocess.Popen(['python', "/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py"],
+                           close_fds=True)  # call subprocess
+    return pid.pid
+    # import os
+    # return os.spawnl(os.P_NOWAITO, 'python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py &')
+
+    import subprocess
+    # pid = os.fork()
+    #
+    # if pid == 0:
+    #     os.execv("/usr/bin/ls", ['/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py'])
+    # # os.system('python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py &')
+    # os.spawnl(os.P_DETACH, 'python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py')
+    # p = subprocess.Popen("python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py",
+    #                      stdin=subprocess.PIPE,
+    #                      stdout=subprocess.PIPE,
+    #                      stderr=subprocess.PIPE,)
+    #                      # close_fds=True)
+    # print p.pid
+    raw_input(1)
+
+
+
+if __name__ == '__main__':
+    print statr_process(12637)
