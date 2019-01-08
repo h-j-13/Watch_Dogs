@@ -70,11 +70,68 @@ def kill_process_group(pgid):
         if e.args[0] == 3:  # No such process
             raise NoSuchProcess(pgid)
 
-# todo 获取同组进程
+
+def get_process_parent_pid(pid):
+    """获取进程父进程id - ppid"""
+    return get_process_info(pid)['ppid']
+
+
+def get_process_group_id(pid):
+    """获取进程组id - pgrp"""
+    return get_process_info(pid)['pgrp']
+
+
+def get_same_group_process(pid):
+    """获取同组进程"""
+    result = []
+    pgrp = get_process_group_id(pid)
+
+    for p in get_all_pid():
+        if pgrp == get_process_group_id(p):
+            result.append(p)
+    # 一般最小的pid为组id和整个进程的父pid
+    return sorted(result, reverse=False)
+
+
+def get_all_child_process(pid):
+    """获取所有子进程"""
+    result = []
+
+    for p in get_all_pid():
+        if pid == get_process_parent_pid(p):
+            result.append(p)
+
+    return sorted(result, reverse=False)
+
+
+@wrap_process_exceptions
+def get_process_execute_path(pid):
+    """获取进程执行文件地址 - /proc/[pid]/cwd"""
+
+    """
+    /proc/[pid]/cwd
+        
+        This is a symbolic link to the current working directory of the process.  
+        To find out the current working directory of process 20, for instance, you can do this:
+            
+            $ cd /proc/20/cwd; /bin/pwd
+
+        Note that the pwd command is often a shell built-in, and might not work properly.  
+        In bash(1), you may use pwd -P.
+        In a multithreaded process, the contents of this symbolic link are not available if the main thread
+         has already terminated (typically by calling pthread_exit(3)).
+
+        Permission to dereference or read (readlink(2)) this symbolic link is governed by a 
+        ptrace access mode PTRACE_MODE_READ_FSCREDS check; see ptrace(2).
+    """
+
+    cwd_path = "/proc/{}/cwd".format(pid)
+    return os.readlink(cwd_path)
+
 
 def statr_process(cmd):
     # todo 完成他
-    """创建一个新的进程(不随主进程退出,返回创建的进程好)"""
+    """后台创建一个新的进程(不随主进程退出,返回创建的进程号)"""
     # reference : https://stackoverflow.com/questions/89228/calling-an-external-command-in-python/92395#92395
     # reference : https://stackoverflow.com/questions/1196074/how-to-start-a-background-process-in-python
 
@@ -104,6 +161,9 @@ def statr_process(cmd):
     raw_input(1)
 
 
+def restart_process(pid, pmd):
+    """重启进程"""
+
 
 if __name__ == '__main__':
-    print statr_process(12637)
+    print get_process_execute_path(17031)
