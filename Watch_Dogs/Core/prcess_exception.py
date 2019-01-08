@@ -108,7 +108,7 @@ def wrap_process_exceptions(func):
             if err.errno in (errno.EPERM, errno.EACCES):
                 raise AccessDenied(args[0]) if args else AccessDenied()
             # ESRCH (no such process), ENOENT (no such file or directory)
-            if err.errno in (errno.ESRCH, errno.ENOENT):
+            if err.errno in (errno.ESRCH, errno.ENOENT, errno.ENOTDIR):
                 raise NoSuchProcess(args[0]) if args else NoSuchProcess()
             # Note: zombies will keep existing under /proc until they're
             # gone so there's no way to distinguish them in here.
