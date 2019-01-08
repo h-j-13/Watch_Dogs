@@ -7,8 +7,13 @@
 主要包括
 - 获取所有进程名
 - 按进程名称搜索进程
--
-
+- 关闭进程
+- 关闭进程(连同相关进程)
+- 获取同组进程
+- 获取所有子进程
+- 获取进程执行文件地址
+- 后台创建一个新的进程(不随主进程退出,返回创建的进程号)
+- 重启进程
 
 """
 
@@ -17,6 +22,7 @@ from prcess_exception import wrap_process_exceptions, NoSuchProcess, ZombieProce
 
 import os
 import signal
+import subprocess
 
 
 def get_all_pid_name(name_type="cmdline"):
@@ -50,7 +56,7 @@ def kill_process(pid):
     try:
         if get_process_info(pid)['state'] == 'Z':  # zombie process
             raise ZombieProcess(pid)
-        os.kill(pid, signal.SIGKILL)
+        os.kill(int(pid), signal.SIGKILL)
     except OSError as e:
         if e.args[0] == 1:  # Operation not permitted
             raise AccessDenied(pid)
@@ -58,17 +64,27 @@ def kill_process(pid):
             raise NoSuchProcess(pid)
 
 
-def kill_process_group(pgid):
-    """关闭进程组"""
+def kill_all_process(pid, kill_child=True, kill_process_gourp=True):
+    """关闭进程 (pid所指进程, 该进程的子进程, 该进程的同组进程)"""
+    # 获取需要关闭的进程
+    self_pid = os.getpid()
+    need_killed_process = [pid]
+    if kill_child:
+        need_killed_process.extend(get_all_child_process(pid))
+    if kill_process_gourp and get_process_group_id(pid) != get_process_group_id(self_pid):
+        need_killed_process.extend(get_same_group_process(get_process_group_id(pid)))
+    need_killed_process = sorted(list(set(need_killed_process)), reverse=True)
+    # 去掉监控进程本身 (因为启动进程会将启动的进程变成监控进程的子进程,这地方逻辑不是很清晰 todo:更好的进程关闭方式? )
+    if self_pid in need_killed_process:
+        need_killed_process.remove(self_pid)
+    # 逐一关闭
     try:
-        if get_process_info(pgid)['state'] == 'Z':  # zombie process
-            raise ZombieProcess(pgid)
-        os.killpg(pgid, signal.SIGKILL)
-    except OSError as e:
-        if e.args[0] == 1:  # Operation not permitted
-            raise AccessDenied(pgid)
-        if e.args[0] == 3:  # No such process
-            raise NoSuchProcess(pgid)
+        for p in need_killed_process:
+            kill_process(p)
+    except NoSuchProcess as e:
+        pass
+
+    return True
 
 
 def get_process_parent_pid(pid):
@@ -129,41 +145,31 @@ def get_process_execute_path(pid):
     return os.readlink(cwd_path)
 
 
-def statr_process(cmd):
-    # todo 完成他
+def start_process(execute_file_full_path):
     """后台创建一个新的进程(不随主进程退出,返回创建的进程号)"""
+    # reference : https://stackoverflow.com/questions/1605520/how-to-launch-and-run-external-script-in-background
+    # reference : https://www.cnblogs.com/zhoug2020/p/5079407.html
     # reference : https://stackoverflow.com/questions/89228/calling-an-external-command-in-python/92395#92395
     # reference : https://stackoverflow.com/questions/1196074/how-to-start-a-background-process-in-python
 
-    # from subprocess import call
-    # call(["python", "/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py"])
-
-    import subprocess
-    pid = subprocess.Popen(['python', "/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py"],
-                           close_fds=True)  # call subprocess
-    return pid.pid
-    # import os
-    # return os.spawnl(os.P_NOWAITO, 'python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py &')
-
-    import subprocess
-    # pid = os.fork()
-    #
-    # if pid == 0:
-    #     os.execv("/usr/bin/ls", ['/home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py'])
-    # # os.system('python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py &')
-    # os.spawnl(os.P_DETACH, 'python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py')
-    # p = subprocess.Popen("python /home/houjie/Watch_Dogs/Watch_Dogs/Test/test.py",
-    #                      stdin=subprocess.PIPE,
-    #                      stdout=subprocess.PIPE,
-    #                      stderr=subprocess.PIPE,)
-    #                      # close_fds=True)
-    # print p.pid
-    raw_input(1)
+    # 获取执行文件相关地址
+    cwd = execute_file_full_path[:execute_file_full_path.rindex("/")]
+    execute_file = execute_file_full_path[execute_file_full_path.rindex("/") + 1:]
+    # 启动进程
+    if execute_file.endswith('.py'):  # python
+        p = subprocess.Popen(["nohup", "python", execute_file_full_path],
+                             cwd=cwd,
+                             close_fds=True,
+                             stderr=subprocess.STDOUT)
+        return p.pid
+    # todo : support more execute file
+    else:
+        return False
 
 
-def restart_process(pid, pmd):
+def restart_process(pid, execute_file_full_path):
     """重启进程"""
-
-
-if __name__ == '__main__':
-    print get_process_execute_path(17031)
+    # 关闭
+    kill_all_process(pid)
+    # 启动
+    return start_process(execute_file_full_path)
